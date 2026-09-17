@@ -58,18 +58,50 @@ backlog_2025 = 11.8  # 조원
 construction_sales_2025 = portfolio.loc[portfolio["사업부문"]=="건설", "매출액_억원"].iloc[0]
 backlog_years = backlog_2025 * 10000 / construction_sales_2025
 
-# 3) 주요 건설계약 기준 미청구공사 / 공사미수금
-# '계약금액이 전기 매출액의 5% 이상인 주요 계약' 표의 합계치
+# 3) 건설계약 매출 → 청구 → 회수 분석
+# (a) '계약금액이 전기 매출액의 5% 이상인 주요 계약' 표 합계
 cash_conversion = pd.DataFrame({
     "연도": ["2023", "2024", "2025"],
     "미청구공사_억원": [789.62, 865.60, 1235.23],
     "공사미수금_억원": [964.92, 1547.41, 1536.11]
 })
-cash_conversion["합계_억원"] = (
-    cash_conversion["미청구공사_억원"] +
-    cash_conversion["공사미수금_억원"]
-)
+cash_conversion["합계_억원"] = cash_conversion["미청구공사_억원"] + cash_conversion["공사미수금_억원"]
 cash_conversion["전년대비_증감률"] = cash_conversion["합계_억원"].pct_change() * 100
+
+# (b) 전체 진행 중 건설계약의 미청구공사(공사미수금, 미청구분)
+# 2025 사업보고서 건설계약 주석 기준
+whole_unbilled = pd.DataFrame({
+    "구분": ["국내토목", "국내건축", "국내플랜트", "국내주택", "국내환경", "해외도급"],
+    "2024_억원": [926.07, 483.32, 78.58, 1041.86, 65.12, 399.37],
+    "2025_억원": [725.35, 301.85, 161.52, 1477.48, 87.01, 229.66]
+})
+whole_unbilled["증감_억원"] = whole_unbilled["2025_억원"] - whole_unbilled["2024_억원"]
+whole_unbilled_total_2024 = whole_unbilled["2024_억원"].sum()
+whole_unbilled_total_2025 = whole_unbilled["2025_억원"].sum()
+
+# (c) 주요계약 중 2024→2025 미청구공사 변동을 크게 만든 프로젝트
+# 사업보고서의 전기/당기 주요계약 표를 동일 프로젝트 기준으로 매칭한 값
+project_unbilled_drivers = pd.DataFrame({
+    "프로젝트": [
+        "삼성전자 평택 사무6동 신축공사",
+        "대한항공 엔진정비공장 증축공사",
+        "부산 기장 물류센터 신축공사",
+        "부산 엄궁1구역 주택재개발정비사업",
+        "양평 덕평지구 지역주택조합",
+        "대전 선화동 주상복합",
+        "대전 대성동 공동주택",
+        "세운4구역 도시환경정비사업",
+        "대전 봉명동 주상복합",
+        "대전 선화동2 주상복합"
+    ],
+    "증감_억원": [239.7, 161.5, 145.1, 66.9, 58.1, -203.0, -141.8, -62.8, -49.4, -45.4]
+})
+
+# (d) 계약금액·총원가 추정 변경이 미청구공사(초과청구공사)에 미친 영향
+estimate_change_2025 = pd.DataFrame({
+    "구분": ["국내토목", "국내건축", "국내플랜트", "국내주택", "국내환경", "해외도급"],
+    "추정변경_영향_억원": [-319.62, -30.07, 117.59, 110.05, -46.53, 25.53]
+})
 
 # 4) 연결 영업현금흐름 및 운전자본 변동
 # 2025 사업보고서 연결 현금흐름표 기준 (단위: 억원)
@@ -134,7 +166,7 @@ st.markdown("""
 <div class="kolon-note">
 <b>분석 방향</b><br>
 ① 코오롱글로벌은 어디서 매출을 만드는가 → ② 핵심 건설사업의 미래 매출 기반은 어떠한가
-→ ③ 주요 건설계약에서 매출 인식 이후 회수 관련 계정은 어떻게 움직이는가
+→ ③ 주요계약의 미청구 증가를 프로젝트와 전체 건설계약 관점에서 검증하는가
 → ④ 실제 영업현금흐름은 어떻게 변했고, 2025년 개선을 만든 운전자본 요인은 무엇인가
 </div>
 """, unsafe_allow_html=True)
@@ -142,7 +174,7 @@ st.markdown("""
 tab1, tab2, tab3, tab4 = st.tabs([
     "① 사업 포트폴리오",
     "② 수주 → 매출",
-    "③ 현금전환 분석",
+    "③ 매출 → 청구 → 회수",
     "④ 영업현금흐름 개선 분석"
 ])
 
@@ -256,94 +288,126 @@ with tab2:
 # TAB 3. 현금전환 분석
 # -----------------------------
 with tab3:
-    st.subheader("③ 주요 건설계약 현금전환 분석")
-    st.write(
-        "매출 자체보다, 공사 진행 과정에서 발생하는 미청구공사와 공사미수금의 "
-        "변화를 함께 확인합니다."
-    )
+    st.subheader("③ 건설계약 매출 → 청구 → 회수 분석")
+    st.write("미청구공사와 공사미수금을 단순 잔액으로 보지 않고, 매출이 현금으로 전환되는 과정의 어느 단계에 금액이 쌓이는지 확인합니다.")
 
-    st.caption(
-        "주의: 아래 금액은 코오롱글로벌 전체 미청구공사·공사미수금이 아니라, "
-        "사업보고서의 '계약금액이 전기 매출액의 5% 이상인 주요 건설계약' 표에 기재된 합계입니다."
-    )
+    st.markdown("""
+    <div class="kolon-note">
+    <b>왜 이 두 계정을 보는가?</b><br><br>
+    건설사업은 <b>공사진행 → 매출 인식 → 청구 → 현금 회수</b>의 과정을 거칩니다.<br>
+    • <b>미청구공사</b>: 공사진행에 따라 매출은 인식됐지만 아직 청구 전 단계에 있는 금액<br>
+    • <b>공사미수금</b>: 청구는 완료됐지만 아직 현금으로 회수되지 않은 금액<br><br>
+    따라서 두 계정을 함께 보면 현금전환 과정에서 <b>청구 전 단계와 회수 전 단계 중 어디에 잔액이 쌓이는지</b> 확인할 수 있습니다.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("#### 1. 주요 건설계약: 2025년에는 어디에서 잔액이 늘었나?")
+    st.caption("아래 금액은 회사 전체가 아니라, 사업보고서의 '계약금액이 전기 매출액의 5% 이상인 주요 건설계약' 표의 합계입니다.")
 
     fig3 = go.Figure()
-    fig3.add_trace(go.Bar(
-        x=cash_conversion["연도"],
-        y=cash_conversion["미청구공사_억원"],
-        name="미청구공사"
-    ))
-    fig3.add_trace(go.Bar(
-        x=cash_conversion["연도"],
-        y=cash_conversion["공사미수금_억원"],
-        name="공사미수금"
-    ))
-    fig3.update_layout(
-        barmode="group",
-        title="주요 건설계약 기준 미청구공사·공사미수금",
-        yaxis_title="억원",
-        legend_title_text=""
-    )
+    fig3.add_trace(go.Bar(x=cash_conversion["연도"], y=cash_conversion["미청구공사_억원"], name="미청구공사"))
+    fig3.add_trace(go.Bar(x=cash_conversion["연도"], y=cash_conversion["공사미수금_억원"], name="공사미수금"))
+    fig3.update_layout(barmode="group", title="주요 건설계약 기준 미청구공사·공사미수금", yaxis_title="억원", legend_title_text="")
     st.plotly_chart(fig3, use_container_width=True)
 
     latest = cash_conversion.iloc[-1]
     prev = cash_conversion.iloc[-2]
-
     col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "2025 주요계약 미청구공사",
-        f"{latest['미청구공사_억원']:,.0f}억원",
-        f"{(latest['미청구공사_억원']/prev['미청구공사_억원']-1)*100:.1f}%"
-    )
-    col2.metric(
-        "2025 주요계약 공사미수금",
-        f"{latest['공사미수금_억원']:,.0f}억원",
-        f"{(latest['공사미수금_억원']/prev['공사미수금_억원']-1)*100:.1f}%"
-    )
-    col3.metric(
-        "2025 두 계정 합계",
-        f"{latest['합계_억원']:,.0f}억원",
-        f"{latest['전년대비_증감률']:.1f}%"
-    )
+    col1.metric("2025 주요계약 미청구공사", f"{latest['미청구공사_억원']:,.0f}억원", f"{(latest['미청구공사_억원']/prev['미청구공사_억원']-1)*100:.1f}%")
+    col2.metric("2025 주요계약 공사미수금", f"{latest['공사미수금_억원']:,.0f}억원", f"{(latest['공사미수금_억원']/prev['공사미수금_억원']-1)*100:.1f}%")
+    col3.metric("2025 두 계정 합계", f"{latest['합계_억원']:,.0f}억원", f"{latest['전년대비_증감률']:.1f}%")
 
     st.markdown("""
-    <div class="kolon-note">
-    <b>자동 해석</b><br>
-    2025년 주요 계약 기준 미청구공사는 전년 대비 증가한 반면,
-    공사미수금은 전년과 유사한 수준입니다.
-    두 계정은 곧바로 부실을 의미하지 않으며, 공사진행률·청구조건·발주처의 지급능력과
-    함께 회수 추이를 확인해야 합니다.
+    <div class="kolon-card">
+    <b>1차 진단</b><br><br>
+    2025년 주요계약 공사미수금은 전년 대비 <b>0.7% 감소</b>해 청구 후 미회수 잔액은 추가로 확대되지 않았습니다.
+    반면 미청구공사는 <b>42.7% 증가</b>했습니다. 즉 주요계약에서는 2025년 잔액 증가가 <b>회수 전 단계보다 매출 인식 후 청구 전 단계</b>에 집중됐습니다.
+    다만 이것만으로 회사 전체 현금전환이 악화됐다고 판단할 수는 없습니다.
     </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("왜 미청구공사와 공사미수금을 같이 보나요?"):
-        st.markdown("""
-        - **미청구공사**: 공사진행에 따라 수익은 인식했지만 아직 발주처에 청구하지 못한 금액을 보는 데 활용할 수 있습니다.
-        - **공사미수금**: 청구 이후 아직 회수되지 않은 금액의 추이를 보는 데 활용할 수 있습니다.
-        - 따라서 `수주 → 공사진행 → 매출 인식 → 청구 → 회수` 흐름에서 어느 구간에 금액이 쌓이는지 확인하는 보조지표로 사용할 수 있습니다.
-        - 감사보고서에서도 미청구공사의 회수가능성 평가는 중요한 판단 영역으로 다뤄집니다.
-        """)
-
-    st.markdown("#### 2025 주요 프로젝트 예시")
-    st.dataframe(
-        projects_2025.style.format({
-            "수주총액_억원": "{:,.0f}",
-            "진행률_%": "{:.2f}",
-            "미청구공사_억원": "{:,.2f}",
-            "공사미수금_억원": "{:,.2f}"
-        }),
-        hide_index=True,
-        use_container_width=True
+    st.markdown("#### 2. +369.6억원의 미청구공사 증가: 어떤 프로젝트가 만들었나?")
+    drivers = project_unbilled_drivers.sort_values("증감_억원")
+    fig_driver = px.bar(
+        drivers, x="증감_억원", y="프로젝트", orientation="h", text="증감_억원",
+        labels={"증감_억원":"2024 → 2025 미청구공사 증감(억원)", "프로젝트":""},
+        title="주요 프로젝트별 미청구공사 증감 기여"
     )
+    fig_driver.update_traces(texttemplate="%{text:+.1f}", textposition="outside")
+    fig_driver.add_vline(x=0, line_width=1, line_dash="dash")
+    fig_driver.update_layout(height=520)
+    st.plotly_chart(fig_driver, use_container_width=True)
 
-    selected = st.selectbox("프로젝트 상세 보기", projects_2025["프로젝트"].tolist())
-    row = projects_2025[projects_2025["프로젝트"] == selected].iloc[0]
+    d1, d2 = st.columns(2)
+    with d1:
+        st.markdown("""
+        <div class="kolon-card">
+        <b>증가 측 주요 요인</b><br><br>
+        삼성전자 평택 사무6동 신축공사 <b>+239.7억원</b>, 대한항공 엔진정비공장 증축공사 <b>+161.5억원</b>,
+        부산 기장 물류센터 신축공사 <b>+145.1억원</b> 등이 주요 증가 요인으로 확인됩니다.
+        </div>
+        """, unsafe_allow_html=True)
+    with d2:
+        st.markdown("""
+        <div class="kolon-card">
+        <b>감소 측 주요 요인</b><br><br>
+        대전 선화동 주상복합 <b>-203.0억원</b>, 대전 대성동 공동주택 <b>-141.8억원</b> 등에서는 미청구공사가 감소했습니다.
+        즉 전체 증가는 모든 현장의 일괄적인 악화가 아니라 <b>프로젝트별 증감이 상쇄된 결과</b>입니다.
+        </div>
+        """, unsafe_allow_html=True)
 
-    p1, p2, p3, p4 = st.columns(4)
-    p1.metric("수주총액", f"{row['수주총액_억원']:,.0f}억원")
-    p2.metric("진행률", f"{row['진행률_%']:.2f}%")
-    p3.metric("미청구공사", f"{row['미청구공사_억원']:,.2f}억원")
-    p4.metric("공사미수금", f"{row['공사미수금_억원']:,.2f}억원")
+    st.caption("프로젝트별 증감은 사업보고서의 2024·2025 주요계약 표를 동일 프로젝트 기준으로 매칭한 분석입니다. 공개자료만으로 각 현장의 세부 청구조건이나 발주처별 청구 시점까지는 확인할 수 없습니다.")
+
+    st.markdown("#### 3. 회사 전체 건설계약으로 넓혀 보면?")
+    whole_compare = pd.DataFrame({
+        "연도": ["2024", "2025"],
+        "전체 미청구공사_억원": [whole_unbilled_total_2024, whole_unbilled_total_2025]
+    })
+    c1, c2, c3 = st.columns(3)
+    c1.metric("2024 전체 미청구공사", f"{whole_unbilled_total_2024:,.0f}억원")
+    c2.metric("2025 전체 미청구공사", f"{whole_unbilled_total_2025:,.0f}억원", f"{whole_unbilled_total_2025-whole_unbilled_total_2024:+,.0f}억원")
+    c3.metric("주요계약 미청구공사 증감", "+370억원", "전년 대비 +42.7%")
+
+    fig_whole = go.Figure()
+    fig_whole.add_trace(go.Bar(name="2024", x=whole_unbilled["구분"], y=whole_unbilled["2024_억원"]))
+    fig_whole.add_trace(go.Bar(name="2025", x=whole_unbilled["구분"], y=whole_unbilled["2025_억원"]))
+    fig_whole.update_layout(barmode="group", title="전체 진행 중 건설계약: 부문별 미청구공사", yaxis_title="억원", legend_title_text="")
+    st.plotly_chart(fig_whole, use_container_width=True)
+
+    st.markdown("""
+    <div class="kolon-note">
+    <b>범위를 넓히면 결론이 달라집니다.</b><br><br>
+    주요 대형계약만 보면 미청구공사가 <b>865.6억원 → 1,235.2억원(+42.7%)</b>으로 크게 증가했습니다.
+    그러나 전체 진행 중 건설계약의 미청구공사는 <b>2,994.3억원 → 2,982.9억원</b>으로 약 <b>11.5억원 감소</b>해 사실상 보합입니다.<br><br>
+    즉 2025년 미청구공사 증가는 회사 전체에 광범위하게 나타난 현상이라기보다, <b>일부 주요 대형 프로젝트에서 두드러진 현상</b>으로 보는 것이 더 적절합니다.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("#### 4. 전체 미청구공사는 왜 보합이었나?")
+    change_sorted = whole_unbilled.sort_values("증감_억원")
+    fig_seg = px.bar(change_sorted, x="증감_억원", y="구분", orientation="h", text="증감_억원",
+                     labels={"증감_억원":"2024 → 2025 증감(억원)", "구분":""},
+                     title="부문별 전체 미청구공사 증감")
+    fig_seg.update_traces(texttemplate="%{text:+.1f}", textposition="outside")
+    fig_seg.add_vline(x=0, line_width=1, line_dash="dash")
+    st.plotly_chart(fig_seg, use_container_width=True)
+
+    st.write("국내주택은 약 **+435.6억원** 증가했지만 국내토목 **-200.7억원**, 국내건축 **-181.5억원**, 해외도급 **-169.7억원** 등이 이를 상쇄했습니다. 따라서 특정 부문의 증가만으로 회사 전체 현금전환을 판단하면 왜곡될 수 있습니다.")
+
+    with st.expander("계약금액·총원가 추정 변경도 영향을 줬나?"):
+        st.write("2025년 계약금액·총원가 추정 변경이 미청구공사(초과청구공사)에 미친 영향도 공시돼 있습니다. 국내주택에는 약 **+110.1억원**의 영향이 있었지만, 전체 영향은 약 **-143.1억원**이었습니다.")
+        st.dataframe(estimate_change_2025.style.format({"추정변경_영향_억원":"{:+,.1f}"}), hide_index=True, use_container_width=True)
+        st.write("따라서 국내주택 미청구공사 증가를 단순히 회계 추정 변경 하나로 설명할 수 없습니다. 공사 진행에 따른 매출 인식과 실제 청구 시점의 차이 등도 함께 작용한 것으로 해석해야 합니다.")
+
+    st.markdown("""
+    <div class="kolon-card">
+    <b>이 탭에서 얻는 최종 결론</b><br><br>
+    ① 주요 대형계약에서는 2025년 미청구공사가 크게 증가했고, 프로젝트별로 보면 삼성전자 평택 사무6동·대한항공 엔진정비공장·부산 기장 물류센터 등의 증가 영향이 컸습니다.<br>
+    ② 그러나 전체 진행 중 건설계약으로 범위를 넓히면 미청구공사 총액은 전년과 거의 동일했습니다.<br>
+    ③ 따라서 <b>코오롱글로벌 전체의 현금전환이 악화됐다고 단정하기보다는 일부 대형 프로젝트의 청구 전 잔액이 확대된 현상</b>으로 해석하는 것이 적절합니다.<br>
+    ④ 실제 현금창출이 개선됐는지는 다음 탭의 <b>영업활동현금흐름과 운전자본 변동</b>을 통해 추가 검증합니다.
+    </div>
+    """, unsafe_allow_html=True)
 
 # -----------------------------
 # TAB 4. 영업현금흐름 개선 분석
@@ -514,6 +578,8 @@ with st.expander("데이터 출처 및 해석 유의사항"):
     **유의사항**
     - 이 도구는 공시자료를 구조화해 관계를 빠르게 파악하기 위한 개인 분석 프로젝트입니다.
     - 주요계약 표의 미청구공사·공사미수금 합계는 회사 전체 계정잔액과 동일하지 않습니다.
+    - 전체 진행 중 건설계약 미청구공사: 2024년 299,432백만원 / 2025년 298,287백만원
+    - 2025년 전체 미청구공사 부문별 잔액: 국내토목 72,535 / 국내건축 30,185 / 국내플랜트 16,152 / 국내주택 147,748 / 국내환경 8,701 / 해외도급 22,966백만원
     - 수주잔고는 향후 매출의 참고지표이며, 계약 변경·공정·원가·해지 등에 따라 실제 매출 인식 시점과 금액이 달라질 수 있습니다.
     - 특정 수치만으로 부실·위험 여부를 단정하지 않습니다.
     """)
