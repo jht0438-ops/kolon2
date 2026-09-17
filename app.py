@@ -39,13 +39,22 @@ h1, h2, h3 {letter-spacing: -0.03em;}
 # 단위: 억원 (별도 표시가 없는 경우)
 # -----------------------------
 
-# 1) 2025 판매경로별 매출
-# 원자료 단위: 백만원
-portfolio = pd.DataFrame({
-    "사업부문": ["건설", "상사", "레저", "AM"],
-    "매출액_억원": [23079.78, 3025.76, 760.35, 45.86],
-    "비중": [85.8, 11.3, 2.8, 0.2]
+# 1) 사업 포트폴리오 - 별도기준 매출
+# 2023·2024·2025 사업보고서의 동일 기준 비교 (원자료 단위: 백만원 → 억원 환산)
+portfolio_by_year = pd.DataFrame({
+    "연도": ["2023", "2023", "2023", "2023",
+             "2024", "2024", "2024", "2024",
+             "2025", "2025", "2025", "2025"],
+    "사업부문": ["건설", "상사", "레저", "AM"] * 3,
+    "매출액_억원": [
+        21494.52, 3827.96, 576.56, 0.00,
+        24384.78, 3365.24, 649.87, 0.00,
+        23079.77, 3025.75, 760.35, 45.86
+    ]
 })
+portfolio_by_year["연도총매출_억원"] = portfolio_by_year.groupby("연도")["매출액_억원"].transform("sum")
+portfolio_by_year["비중"] = portfolio_by_year["매출액_억원"] / portfolio_by_year["연도총매출_억원"] * 100
+portfolio = portfolio_by_year[portfolio_by_year["연도"] == "2025"].copy()
 
 # 2) 건설 신규수주 및 수주잔고
 orders = pd.DataFrame({
@@ -149,14 +158,19 @@ st.markdown("""
 <b>분석 방향</b><br>
 ① 코오롱글로벌은 어디서 매출을 만드는가 → ② 신규수주의 주택·비주택 구성이 어떻게 변하는가
 → ③ 확보한 수주가 수주잔고와 미래 매출 기반으로 어떻게 이어지는가
-→ ④ 매출 인식 후 청구 전 단계의 미청구공사는 어디에서 증가했는가
+→ ④ 매출 인식 후 청구 전 단계의 미청구공사는 어디에서 증가했는가<br>
+⑤ 높은 건설 의존도를 완화하기 위해 어떤 사업에 자원을 배분할 것인가
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "① 사업 포트폴리오",
     "② 신규수주 → 수주잔고 → 매출",
-    "③ 매출 → 청구 → 회수"
+    "③ 매출 → 청구 → 회수",
+    "④ 다각화 후보",
+    "⑤ 비건설 사업 검증",
+    "⑥ 비주택 성장축 검증",
+    "⑦ 자원배분 제언"
 ])
 
 # -----------------------------
@@ -164,7 +178,7 @@ tab1, tab2, tab3 = st.tabs([
 # -----------------------------
 with tab1:
     st.subheader("① 사업 포트폴리오 분석")
-    st.write("2025년 판매경로별 매출액을 기준으로 코오롱글로벌의 사업구조를 확인합니다.")
+    st.write("2025년 사업부문별 매출을 먼저 확인하고, 버튼을 누르면 2023~2025년 최근 3개년의 사업구조 변화를 동일 기준으로 비교할 수 있습니다.")
 
     c1, c2 = st.columns([1, 1.15])
 
@@ -189,27 +203,77 @@ with tab1:
     with c2:
         df_show = portfolio.copy()
         df_show["매출액"] = df_show["매출액_억원"].map(lambda x: f"{x:,.0f}억원")
-        df_show["비중"] = df_show["비중"].map(lambda x: f"{x:.1f}%")
+        df_show["비중표시"] = df_show["비중"].map(lambda x: f"{x:.1f}%")
         st.dataframe(
-            df_show[["사업부문", "매출액", "비중"]],
+            df_show[["사업부문", "매출액", "비중표시"]].rename(columns={"비중표시":"비중"}),
             hide_index=True,
             use_container_width=True
         )
 
         st.markdown("""
         <div class="kolon-card">
-        <b>해석</b><br><br>
-        2025년 매출의 약 <b>85.8%</b>가 건설부문에서 발생합니다.
+        <b>2025년 해석</b><br><br>
+        2025년 별도기준 매출의 약 <b>85.8%</b>가 건설부문에서 발생합니다.
         따라서 코오롱글로벌 전체 재무를 이해할 때 건설사업의
-        수주, 매출 인식, 회수 관련 계정을 우선적으로 살펴볼 필요가 있습니다.<br><br>
-        상사는 약 11.3%, 레저는 약 2.8%, AM은 약 0.2%를 차지합니다.
+        수주, 매출 인식, 청구 관련 계정을 우선적으로 살펴볼 필요가 있습니다.<br><br>
+        상사는 약 11.2%, 레저는 약 2.8%, AM은 약 0.2%를 차지합니다.
         </div>
         """, unsafe_allow_html=True)
 
-    st.info(
-        "레저부문에는 호텔·골프/리조트·스포렉스가 포함되고, "
-        "AM은 오피스·사옥·지식산업센터 등 자산관리 관련 사업입니다."
-    )
+    st.caption("기준: 별도재무제표 사업부문별 매출. 2025년 AM은 2025년 12월 합병 이후 1개월 실적이 포함되어 있습니다.")
+
+    if "show_three_year_portfolio" not in st.session_state:
+        st.session_state.show_three_year_portfolio = False
+
+    if st.button("최근 3개년 함께 비교하기", use_container_width=True):
+        st.session_state.show_three_year_portfolio = not st.session_state.show_three_year_portfolio
+
+    if st.session_state.show_three_year_portfolio:
+        st.markdown("---")
+        st.markdown("### 2023~2025 사업 포트폴리오 변화")
+        st.write("각 연도의 총매출뿐 아니라 건설·상사·레저가 전체 매출에서 차지하는 비중이 어떻게 달라졌는지 함께 확인합니다.")
+
+        totals = portfolio_by_year.groupby("연도", as_index=False)["매출액_억원"].sum()
+        t1, t2, t3 = st.columns(3)
+        t1.metric("2023 총매출", f"{totals.loc[totals['연도']=='2023','매출액_억원'].iloc[0]:,.0f}억원")
+        t2.metric("2024 총매출", f"{totals.loc[totals['연도']=='2024','매출액_억원'].iloc[0]:,.0f}억원", "+9.7%")
+        t3.metric("2025 총매출", f"{totals.loc[totals['연도']=='2025','매출액_억원'].iloc[0]:,.0f}억원", "-5.2%")
+
+        fig_mix = px.bar(
+            portfolio_by_year,
+            x="연도", y="매출액_억원", color="사업부문",
+            barmode="stack",
+            text_auto=".3s",
+            labels={"매출액_억원":"매출액(억원)", "연도":"", "사업부문":"사업부문"},
+            title="최근 3개년 사업부문별 매출액"
+        )
+        fig_mix.update_layout(margin=dict(t=60, b=20, l=20, r=20))
+        st.plotly_chart(fig_mix, use_container_width=True)
+
+        pivot_share = portfolio_by_year.pivot(index="사업부문", columns="연도", values="비중").reset_index()
+        order_map = {"건설":0, "상사":1, "레저":2, "AM":3}
+        pivot_share["_order"] = pivot_share["사업부문"].map(order_map)
+        pivot_share = pivot_share.sort_values("_order").drop(columns="_order")
+        for y in ["2023", "2024", "2025"]:
+            pivot_share[y] = pivot_share[y].map(lambda x: f"{x:.1f}%")
+        st.markdown("#### 사업부문별 매출 비중")
+        st.dataframe(pivot_share, hide_index=True, use_container_width=True)
+
+        construction = portfolio_by_year[portfolio_by_year["사업부문"] == "건설"].copy()
+        trading = portfolio_by_year[portfolio_by_year["사업부문"] == "상사"].copy()
+        leisure = portfolio_by_year[portfolio_by_year["사업부문"] == "레저"].copy()
+
+        st.markdown(f"""
+        <div class="kolon-card">
+        <b>3개년에서 얻는 결론</b><br><br>
+        ① 건설 매출은 <b>2023년 {construction.iloc[0]['매출액_억원']:,.0f}억원 → 2024년 {construction.iloc[1]['매출액_억원']:,.0f}억원 → 2025년 {construction.iloc[2]['매출액_억원']:,.0f}억원</b>으로, 2024년 확대 후 2025년 감소했습니다.<br><br>
+        ② 전체 매출에서 건설이 차지하는 비중은 <b>2023년 {construction.iloc[0]['비중']:.1f}% → 2024년 {construction.iloc[1]['비중']:.1f}% → 2025년 {construction.iloc[2]['비중']:.1f}%</b>로 높은 수준을 유지했습니다. 즉 최근 3개년 재무구조를 분석할 때 건설부문을 중심에 두는 근거가 더욱 명확합니다.<br><br>
+        ③ 상사 매출은 <b>2023년 {trading.iloc[0]['매출액_억원']:,.0f}억원 → 2025년 {trading.iloc[2]['매출액_억원']:,.0f}억원</b>으로 감소한 반면, 레저 매출은 <b>{leisure.iloc[0]['매출액_억원']:,.0f}억원 → {leisure.iloc[2]['매출액_억원']:,.0f}억원</b>으로 증가했습니다.<br><br>
+        ④ 따라서 다음 탭에서는 회사 실적에 가장 큰 영향을 주는 <b>건설부문의 신규수주 구성과 수주잔고</b>를 집중적으로 분석합니다.
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.info("비교 시 유의: 2023·2024년 레저는 당시 스포렉스 중심 실적이며, 2025년에는 12월 합병으로 편입된 레저·AM 사업의 1개월 실적이 포함되어 있어 사업범위가 완전히 동일하지는 않습니다.")
 
 # -----------------------------
 # TAB 2. 신규수주 → 수주잔고 → 매출
@@ -418,6 +482,116 @@ with tab3:
     </div>
     """, unsafe_allow_html=True)
 
+
+# -----------------------------
+# TAB 4~7. 사업 다각화 확장 분석
+# -----------------------------
+# 2026년 1분기 연결 기준 사업부문 매출(억원)
+portfolio_2026q1 = pd.DataFrame({
+    "사업부문": ["건설", "상사", "레저", "AM"],
+    "매출액_억원": [5232.38, 431.24, 453.11, 195.37]
+})
+portfolio_2026q1["비중_%"] = portfolio_2026q1["매출액_억원"] / portfolio_2026q1["매출액_억원"].sum() * 100
+
+# 공시·사업보고서에서 확인되는 다각화 후보와 근거
+diversification_candidates = pd.DataFrame({
+    "후보": ["산업·하이테크", "환경·수처리", "풍력·신재생", "AM", "레저", "상사"],
+    "구분": ["건설 내부", "건설 내부", "건설 내부", "건설 외부", "건설 외부", "건설 외부"],
+    "공시에서 확인되는 근거": [
+        "대한항공 엔진정비공장·바이오/반도체 관련 산업시설 수행",
+        "환경사업 수행 + 수처리 R&D + 반도체 폐수 처리기술 개발",
+        "신재생에너지 조직·풍력 개발/EPC/운영 경험",
+        "부동산 위탁운영·건물 유지관리, 2025년 말 합병으로 사업 확대",
+        "호텔·골프·리조트·스포츠센터 운영, 2025년 말 합병으로 사업 확대",
+        "철강재·화학재·산업소재 중심 기존 비건설 사업"
+    ],
+    "주요 판단지표": [
+        "수주·수주잔고·주요계약", "수주·R&D·산업시설 연계", "수주·개발/운영 파이프라인",
+        "매출·영업손익·반복매출", "매출·영업손익·운영수익", "매출·영업손익·성장추이"
+    ]
+})
+
+# 건설 내부 후보의 공개자료 기반 검증 포인트
+construction_growth = pd.DataFrame({
+    "후보": ["산업·하이테크", "환경·수처리", "풍력·신재생"],
+    "실제 사업 기반": ["대한항공 엔진정비공장, 반도체·바이오 산업시설", "삼성 평택 공공폐수처리시설 등 환경공사", "풍력 개발·EPC·운영 경험"],
+    "기술/R&D 연결": ["산업시설 수행역량", "수처리 기술 및 반도체 폐수 특정물질 처리기술", "신재생에너지 사업역량"],
+    "재무제표 직접 수익성 비교": ["불가(건설부문에 포함)", "불가(건설부문에 포함)", "불가(건설부문에 포함)"],
+    "분석상 역할": ["성장축 검증", "성장축 검증", "중장기 성장축 검증"]
+})
+
+with tab4:
+    st.subheader("④ 기존 재무분석에서 사업 다각화 질문으로")
+    st.markdown("""
+    <div class="kolon-note">
+    <b>왜 새로운 분석을 추가했나?</b><br><br>
+    앞선 세 탭에서는 <b>사업별 매출 구성 → 신규수주 → 수주잔고 → 매출 → 미청구공사 → 공사미수금</b>을 연결했습니다.
+    이를 통해 건설사업의 규모뿐 아니라 매출 인식 이후 청구·회수 단계까지 함께 봐야 한다는 점을 확인했습니다.<br><br>
+    동시에 건설 매출 의존도가 여전히 높은 반면 신규수주에서는 비주택 비중이 절반 이상을 유지하고 있다는 점에 주목했습니다.
+    따라서 분석을 한 단계 확장해 <b>“주택 의존도를 낮추면서 미래 성장을 확보하려면 어느 사업에 한정된 자원을 배분해야 하는가?”</b>를 검토합니다.
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("### 다각화 후보군")
+    st.dataframe(diversification_candidates, hide_index=True, use_container_width=True)
+    st.markdown("""<div class="kolon-card"><b>분석 원칙</b><br><br>
+    ① 먼저 재무제표에서 직접 비교 가능한 사업은 매출·영업손익으로 검증합니다.<br>
+    ② 건설 내부 사업처럼 별도 손익이 공시되지 않는 경우 수주·수주잔고·주요계약을 중심으로 봅니다.<br>
+    ③ 재무제표가 미래 성장성을 직접 보여주지 못하는 부분만 R&D와 사업자료로 보완합니다.<br>
+    ④ 따라서 처음부터 특정 사업을 정답으로 두지 않고, 근거가 약한 후보를 단계적으로 제외합니다.
+    </div>""", unsafe_allow_html=True)
+
+with tab5:
+    st.subheader("⑤ 비건설 사업 1차 검증: 상사·레저·AM")
+    st.write("건설 밖 사업은 재무제표의 사업부문 정보로 직접 확인할 수 있으므로 가장 먼저 숫자로 검증합니다.")
+    fig_q1 = px.bar(portfolio_2026q1[portfolio_2026q1['사업부문']!='건설'], x="사업부문", y="매출액_억원", text="매출액_억원",
+                    title="2026년 1분기 비건설 사업 매출", labels={"매출액_억원":"매출액(억원)","사업부문":""})
+    fig_q1.update_traces(texttemplate="%{text:,.0f}억원", textposition="outside")
+    st.plotly_chart(fig_q1, use_container_width=True)
+    q = portfolio_2026q1.copy(); q['매출액']=q['매출액_억원'].map(lambda x:f"{x:,.0f}억원"); q['비중']=q['비중_%'].map(lambda x:f"{x:.1f}%")
+    st.dataframe(q[['사업부문','매출액','비중']], hide_index=True, use_container_width=True)
+    st.warning("2025년 말 합병으로 레저·AM의 사업범위가 확대됐으므로 2025년 연간 실적과 2026년 실적의 단순 성장률 비교는 왜곡될 수 있습니다. 이 탭에서는 현재 사업규모와 향후 반복수익 가능성을 중심으로 봅니다.")
+    st.markdown("""<div class="kolon-card"><b>1차 후보 정리</b><br><br>
+    • <b>상사</b>: 이미 의미 있는 매출을 내는 기존 사업이지만 최근 성장추이와 추가 투자 필요성을 별도로 확인해야 합니다.<br>
+    • <b>레저</b>: 합병으로 규모가 확대돼 운영사업 다각화 후보로 남깁니다.<br>
+    • <b>AM</b>: 현재 규모는 작지만 부동산 위탁운영·건물 유지관리라는 반복 서비스매출 구조가 건설의 프로젝트형 수익을 보완할 수 있어 후보로 남깁니다.<br><br>
+    <b>→ 다음 단계에서는 건설 내부 비주택 후보를 별도로 검증합니다.</b>
+    </div>""", unsafe_allow_html=True)
+
+with tab6:
+    st.subheader("⑥ 건설 내부 비주택 성장축 검증")
+    st.write("산업·하이테크, 환경·수처리, 풍력은 별도 영업부문 손익이 공시되지 않으므로 수주·주요계약·R&D를 연결해 판단합니다.")
+    st.dataframe(construction_growth, hide_index=True, use_container_width=True)
+    st.markdown("### 기존 건설계약 분석을 성장사업 관점에서 다시 보기")
+    reclassified = pd.DataFrame({
+        "프로젝트": ["대한항공 엔진정비공장 증축공사", "삼성전자 평택 사무6동 신축공사", "삼성 평택 고덕 공공폐수처리시설"],
+        "성장영역": ["산업·하이테크", "산업·하이테크", "환경·수처리"],
+        "의미": ["항공 MRO 산업시설 수행경험", "대형 산업시설 수행경험", "산업시설과 수처리 역량의 결합"]
+    })
+    st.dataframe(reclassified, hide_index=True, use_container_width=True)
+    st.markdown("""<div class="kolon-note"><b>여기서 얻는 결론</b><br><br>
+    비주택을 하나의 묶음으로 볼 필요는 없습니다. 공개자료에서 산업·하이테크와 환경·수처리는 실제 프로젝트 수행과 기술개발의 연결고리가 확인됩니다.
+    특히 환경·수처리는 기존 환경공사 경험에 산업용 수처리 R&D를 결합할 수 있다는 점에서 산업시설 확대와 함께 검토할 수 있습니다.<br><br>
+    풍력 역시 기존 역량을 가진 후보지만, 현재 공시만으로 세 후보의 개별 영업이익률을 직접 비교할 수 없으므로 <b>수익성이 더 높다고 단정하지 않습니다.</b>
+    </div>""", unsafe_allow_html=True)
+
+with tab7:
+    st.subheader("⑦ 자원배분 제언")
+    st.write("앞선 재무분석과 사업자료를 종합해 자원의 목적을 성장·안정·중장기로 나눠 제언합니다.")
+    c1,c2,c3=st.columns(3)
+    with c1:
+        st.markdown("""<div class="kolon-card"><b>성장 투자 후보</b><br><br><b>산업·하이테크 + 환경·수처리</b><br><br>비주택 수주 확대 흐름과 실제 산업시설 수행경험을 활용하고, 수처리 R&D를 산업시설 경쟁력과 연결합니다.<br><br><b>자원:</b> 전문인력·R&D·수주역량</div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown("""<div class="kolon-card"><b>안정수익 후보</b><br><br><b>AM</b><br><br>건설의 수주·준공 중심 수익구조와 달리 위탁운영·유지관리 서비스를 통해 반복매출을 확보할 가능성을 검토합니다.<br><br><b>자원:</b> 운영자산·장기계약·건설고객 연계</div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown("""<div class="kolon-card"><b>중장기 육성 후보</b><br><br><b>풍력·신재생</b><br><br>기존 개발·EPC·운영 경험을 활용하되 현재 별도 수익성이 공시되지 않는 만큼 단계적 투자와 사업성 검증을 병행합니다.<br><br><b>자원:</b> 개발 파이프라인·사업성 검증</div>""", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="kolon-note"><b>최종 해석</b><br><br>
+    이 분석의 결론은 단순히 ‘건설을 줄인다’가 아닙니다. <b>기존 건설 역량을 활용해 주택 의존도를 낮출 성장축을 키우는 동시에, 건설과 다른 반복수익 사업을 보완하는 것</b>입니다.
+    따라서 현재 공개자료 기준으로는 산업·하이테크와 환경·수처리를 성장투자 후보로, AM을 안정수익 후보로, 풍력을 중장기 육성 후보로 두고 자원배분을 검토하는 구조가 적절합니다.
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("주의: 이는 공개 공시와 사업자료를 구조화한 개인 분석 결과이며 회사의 공식 투자계획 또는 사업별 수익성 순위를 의미하지 않습니다.")
+
 # -----------------------------
 # 출처 / 유의사항
 # -----------------------------
@@ -444,6 +618,8 @@ with st.expander("데이터 출처 및 해석 유의사항"):
     - 신규수주와 회계 주석의 당기 계약액은 서로 다른 지표입니다. 당기 계약액에는 신규수주와 계약변경에 따른 도급액 변동 등이 포함됩니다.
     - 수주잔고는 향후 매출의 참고지표이며, 계약 변경·공정·원가·해지 등에 따라 실제 매출 인식 시점과 금액이 달라질 수 있습니다.
     - 특정 수치만으로 부실·위험 여부를 단정하지 않습니다.
+    - 2026년 1분기 연결 사업부문 매출: 건설 523,238백만원 / 상사 43,124백만원 / 레저 45,311백만원 / AM 19,537백만원
+    - 산업·하이테크·환경·수처리·풍력은 건설부문 안에 포함되어 개별 영업이익률이 별도 공시되지 않으므로 수익성 우열을 단정하지 않습니다.
     """)
 
 st.caption("KOLON Global Financial Insight · 개인 재무분석 프로젝트")
